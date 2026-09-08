@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Poll rqclubsport.com tennis schedule and notify via Telegram when a court frees up."""
 
+import argparse
 import json
 import os
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
@@ -16,6 +19,11 @@ STATE_FILE = Path(__file__).parent / "state.json"
 # Courts that close earlier than the rest — slots starting at/after this hour are invalid.
 EARLY_CLOSE_COURTS = {"Court 5", "Court 6", "Court 7"}
 EARLY_CLOSE_HOUR = 21
+
+# Only send notifications within this local-time window (Bangkok), every day.
+BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
+NOTIFY_START_HOUR = 9
+NOTIFY_END_HOUR = 19  # 7pm
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -89,31 +97,59 @@ def send_telegram(message: str) -> None:
     resp.raise_for_status()
 
 
+def in_notify_window(now: datetime) -> bool:
+    return NOTIFY_START_HOUR <= now.astimezone(BANGKOK_TZ).hour < NOTIFY_END_HOUR
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true", help="Print instead of sending Telegram messages")
+    parser.add_argument("--ignore-window", action="store_true", help="Ignore the 9am-7pm Bangkok time gate")
+    parser.add_argument("--reset-state", action="store_true", help="Clear saved state before running")
+    args = parser.parse_args()
+
+    if args.reset_state:
+        save_state({})
+
     html = fetch_html()
     current = parse_available_slots(html)
 
-    old_state = load_state()
-    new_state: dict[str, list[list[str]]] = {}
+    old_notified = load_state()
+    new_notified: dict[str, list[str]] = {}
     newly_available: list[str] = []
 
+    within_window = args.ignore_window or in_notify_window(datetime.now(tz=ZoneInfo("UTC")))
+
     for date, slots in current.items():
-        slot_keys = sorted(f"{t}|{c}" for t, c in slots)
-        new_state[date] = slot_keys
-        previously_seen = set(old_state.get(date, []))
-        for key in slot_keys:
-            if key not in previously_seen:
+        current_keys = set(f"{t}|{c}" for t, c in slots)
+        # Drop entries for slots that got booked again, so if they reopen later we re-alert.
+        still_notified = set(old_notified.get(date, [])) & current_keys
+        diff = current_keys - still_notified
+
+        if diff and within_window:
+            for key in sorted(diff):
                 time_str, court = key.split("|", 1)
                 newly_available.append(f"{date} {time_str} - {court}")
+            new_notified[date] = sorted(current_keys)  # mark everything currently open as notified
+        else:
+            # Outside the notify window (or nothing new): keep the diff pending for next run.
+            new_notified[date] = sorted(still_notified)
 
     if newly_available:
-        message = "🎾 New open tennis slot(s):\n" + "\n".join(sorted(newly_available))
+        message = (
+            "🎾 New open tennis slot(s):\n"
+            + "\n".join(sorted(newly_available))
+            + f"\n\nBook here: {SCHEDULE_URL}"
+        )
         print(message)
-        send_telegram(message)
+        if not args.dry_run:
+            send_telegram(message)
+    elif not within_window:
+        print("Outside notify window (9am-7pm Bangkok) — skipping.")
     else:
         print("No new available slots.")
 
-    save_state(new_state)
+    save_state(new_notified)
 
 
 if __name__ == "__main__":
