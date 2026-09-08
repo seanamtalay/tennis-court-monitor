@@ -2,6 +2,7 @@ name: Tennis Court Monitor
 
 on:
   schedule:
+    # Every 5 minutes.
     - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
