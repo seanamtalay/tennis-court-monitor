@@ -101,6 +101,12 @@ def in_notify_window(now: datetime) -> bool:
     return NOTIFY_START_HOUR <= now.astimezone(BANGKOK_TZ).hour < NOTIFY_END_HOUR
 
 
+def is_past(date_str: str, time_str: str, now: datetime) -> bool:
+    """Whether a given date (YYYY-MM-DD) + hour (HH:00) slot has already started, Bangkok time."""
+    slot_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=BANGKOK_TZ)
+    return slot_dt <= now.astimezone(BANGKOK_TZ)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Print instead of sending Telegram messages")
@@ -118,10 +124,13 @@ def main() -> None:
     new_notified: dict[str, list[str]] = {}
     newly_available: list[str] = []
 
-    within_window = args.ignore_window or in_notify_window(datetime.now(tz=ZoneInfo("UTC")))
+    now = datetime.now(tz=ZoneInfo("UTC"))
+    within_window = args.ignore_window or in_notify_window(now)
 
     for date, slots in current.items():
-        current_keys = set(f"{t}|{c}" for t, c in slots)
+        current_keys = set(
+            f"{t}|{c}" for t, c in slots if not is_past(date, t, now)
+        )
         # Drop entries for slots that got booked again, so if they reopen later we re-alert.
         still_notified = set(old_notified.get(date, [])) & current_keys
         diff = current_keys - still_notified
