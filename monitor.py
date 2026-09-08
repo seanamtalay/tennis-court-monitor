@@ -107,6 +107,26 @@ def is_past(date_str: str, time_str: str, now: datetime) -> bool:
     return slot_dt <= now.astimezone(BANGKOK_TZ)
 
 
+def day_label(date_str: str, now: datetime) -> str:
+    """e.g. 'Today (8 Sep 2026)' / 'Tomorrow (9 Sep 2026)' / 'Wed (10 Sep 2026)'."""
+    date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    today = now.astimezone(BANGKOK_TZ).date()
+    days_ahead = (date - today).days
+    prefix = {0: "Today", 1: "Tomorrow"}.get(days_ahead, date.strftime("%a"))
+    return f"{prefix} ({date.strftime('%-d %b %Y')})"
+
+
+def format_message(newly_available: dict[str, list[str]], now: datetime) -> str:
+    lines = ["🎾 <b>Open Tennis Courts</b>", ""]
+    for date in sorted(newly_available):
+        lines.append(f"<b>{day_label(date, now)}</b>")
+        for time_str, court in sorted(newly_available[date]):
+            lines.append(f"• {time_str} — {court}")
+        lines.append("")
+    lines.append(f"🔗 More details: {SCHEDULE_URL}")
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Print instead of sending Telegram messages")
@@ -122,7 +142,7 @@ def main() -> None:
 
     old_notified = load_state()
     new_notified: dict[str, list[str]] = {}
-    newly_available: list[str] = []
+    newly_available: dict[str, list[tuple[str, str]]] = {}
 
     now = datetime.now(tz=ZoneInfo("UTC"))
     within_window = args.ignore_window or in_notify_window(now)
@@ -136,20 +156,14 @@ def main() -> None:
         diff = current_keys - still_notified
 
         if diff and within_window:
-            for key in sorted(diff):
-                time_str, court = key.split("|", 1)
-                newly_available.append(f"{date} {time_str} - {court}")
+            newly_available[date] = [tuple(key.split("|", 1)) for key in diff]
             new_notified[date] = sorted(current_keys)  # mark everything currently open as notified
         else:
             # Outside the notify window (or nothing new): keep the diff pending for next run.
             new_notified[date] = sorted(still_notified)
 
     if newly_available:
-        message = (
-            "🎾 New open tennis slot(s):\n"
-            + "\n".join(sorted(newly_available))
-            + f"\n\nBook here: {SCHEDULE_URL}"
-        )
+        message = format_message(newly_available, now)
         print(message)
         if not args.dry_run:
             send_telegram(message)
