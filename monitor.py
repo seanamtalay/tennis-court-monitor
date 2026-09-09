@@ -116,13 +116,19 @@ def day_label(date_str: str, now: datetime) -> str:
     return f"{prefix} ({date.strftime('%-d %b %Y')})"
 
 
-def format_message(newly_available: dict[str, list[str]], now: datetime) -> str:
+def format_message(
+    all_available: dict[str, list[tuple[str, str]]],
+    new_keys: set[str],
+    now: datetime,
+) -> str:
     lines = ["🎾 <b>Open Tennis Courts</b>", ""]
-    for date in sorted(newly_available):
+    for date in sorted(all_available):
         lines.append(f"<b>{day_label(date, now)}</b>")
-        for time_str, court in sorted(newly_available[date]):
-            lines.append(f"• {time_str} — {court}")
+        for time_str, court in sorted(all_available[date]):
+            marker = " 🆕" if f"{date}|{time_str}|{court}" in new_keys else ""
+            lines.append(f"• {time_str} — {court}{marker}")
         lines.append("")
+    lines.append("🆕 = newly opened since last update")
     lines.append(f"🔗 More details: {SCHEDULE_URL}")
     return "\n".join(lines)
 
@@ -142,7 +148,9 @@ def main() -> None:
 
     old_notified = load_state()
     new_notified: dict[str, list[str]] = {}
-    newly_available: dict[str, list[tuple[str, str]]] = {}
+    all_available: dict[str, list[tuple[str, str]]] = {}
+    new_keys: set[str] = set()
+    has_diff = False
 
     now = datetime.now(tz=ZoneInfo("UTC"))
     within_window = args.ignore_window or in_notify_window(now)
@@ -151,19 +159,24 @@ def main() -> None:
         current_keys = set(
             f"{t}|{c}" for t, c in slots if not is_past(date, t, now)
         )
+        if not current_keys:
+            continue
+        all_available[date] = [tuple(key.split("|", 1)) for key in current_keys]
+
         # Drop entries for slots that got booked again, so if they reopen later we re-alert.
         still_notified = set(old_notified.get(date, [])) & current_keys
         diff = current_keys - still_notified
 
         if diff and within_window:
-            newly_available[date] = [tuple(key.split("|", 1)) for key in diff]
+            has_diff = True
+            new_keys |= {f"{date}|{key}" for key in diff}
             new_notified[date] = sorted(current_keys)  # mark everything currently open as notified
         else:
             # Outside the notify window (or nothing new): keep the diff pending for next run.
             new_notified[date] = sorted(still_notified)
 
-    if newly_available:
-        message = format_message(newly_available, now)
+    if has_diff:
+        message = format_message(all_available, new_keys, now)
         print(message)
         if not args.dry_run:
             send_telegram(message)
