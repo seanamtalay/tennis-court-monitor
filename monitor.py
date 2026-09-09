@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -29,10 +30,17 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 
-def fetch_html() -> str:
-    resp = requests.get(SCHEDULE_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    resp.raise_for_status()
-    return resp.text
+def fetch_html(retries: int = 3, backoff_seconds: float = 5) -> str:
+    """The site's connection is flaky, so retry a few times before giving up."""
+    for attempt in range(1, retries + 1):
+        try:
+            resp = requests.get(SCHEDULE_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+            resp.raise_for_status()
+            return resp.text
+        except requests.exceptions.RequestException:
+            if attempt == retries:
+                raise
+            time.sleep(backoff_seconds)
 
 
 def parse_available_slots(html: str) -> dict[str, list[tuple[str, str]]]:
