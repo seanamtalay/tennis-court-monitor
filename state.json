@@ -1,7 +1,29 @@
 {
   "2026-10-23": [
+    "20:00|Court 5",
     "22:00|Court 3",
     "22:00|Court 4"
   ],
-  "2026-10-24": []
+  "2026-10-24": [
+    "07:00|Court 3",
+    "07:00|Court 4",
+    "09:00|Court 4",
+    "12:00|Court 7",
+    "16:00|Court 3",
+    "16:00|Court 4",
+    "17:00|Court 2",
+    "18:00|Court 1 (single)",
+    "18:00|Court 2",
+    "19:00|Court 2",
+    "20:00|Court 1 (single)",
+    "20:00|Court 2",
+    "20:00|Court 5",
+    "21:00|Court 1 (single)",
+    "21:00|Court 2",
+    "21:00|Court 3",
+    "22:00|Court 1 (single)",
+    "22:00|Court 2",
+    "22:00|Court 3",
+    "22:00|Court 4"
+  ]
 }
