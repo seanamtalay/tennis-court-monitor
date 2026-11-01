@@ -5,5 +5,20 @@
     "22:00|Court 2",
     "22:00|Court 3"
   ],
-  "2026-11-02": []
+  "2026-11-02": [
+    "06:00|Court 1 (single)",
+    "06:00|Court 3",
+    "06:00|Court 4",
+    "10:00|Court 3",
+    "11:00|Court 1 (single)",
+    "13:00|Court 2",
+    "14:00|Court 1 (single)",
+    "14:00|Court 2",
+    "15:00|Court 2",
+    "16:00|Court 2",
+    "21:00|Court 1 (single)",
+    "22:00|Court 2",
+    "22:00|Court 3",
+    "22:00|Court 4"
+  ]
 }
